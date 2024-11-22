@@ -1,19 +1,10 @@
-[![ShellCheck](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/xiahualiu/wg_gaming_installer/actions/workflows/shellcheck.yml)
 # WireGuard installer for Gaming
 
-**Thank you for all the stars!**
+**Thank you for all the stars!** I was not aware it was so popular before so I decided to actively maintain it from now.
 
-**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports multiple WireGuard peers now!**
+**This project is a bash script that aims to setup a [WireGuard](https://www.wireguard.com/) VPN that is specified for PERSONAL gaming or torrenting use. It supports only ONE WireGuard client as of now!**
 
-## Update Logs
-
-- 09/29/2024 Major update.
-    - Added multi-peer support.
-
-- 09/23/2024 Major update.
-    - Added support for OpenVZ, LXC by installing wireguard-go.
-    - Switched from legacy `iptables` to `nftables` rules.
-    - Added shellcheck GitHub Action.
+If you are looking for a common WireGuard install script that supports multi-client connections, i.e. multiple devices connect to the VPN at the same time, please visit [this repository](https://github.com/angristan/wireguard-install/) to continue.
 
 ## What it does
 
@@ -33,7 +24,7 @@ With this script, you do not need to enable port forwarding on your router, you 
 
 >The local ports will be forwarded to the server directly.
 
-It solves connection problems due to strict NAT in these scenarios:
+It solves the following scenarios:
 
 1. You want to host a Minecraft/Terraria, etc. server online and play with your friend, but you cannot figure out how to enable port forwarding on your router, or your ISP just did not give you a public IP address.
 
@@ -41,91 +32,100 @@ It solves connection problems due to strict NAT in these scenarios:
 
 For a better gaming experience, the server should be close to your living region and has a low ping value. You should ping the provider's looking glass datacenter IP first before purchasing a VPS.
 
-## Port Forwarding
-
-The script **Port Forwards** the client ports to the corresponding ports on the server side. **Please make sure that there are no other applications (such as SSH) using these ports on the server, otherwise It will deafen any application that listens to these ports.** I highly suggest running this script on an new empty system. 
-
-The script supports both IPv4 and IPv6.
-
-### Customize preset `nftables` rules
-
-You can customize the nftables rules by editing the `add-fullcone-nat.sh` file **BEFORE** running the installer script.
-
-The detailed explanations of these `nftables` rules can be found in my blog post [Understand routing and NAT with WireGuard VPN](https://xiahua.pages.dev/wg-route-nat/).
-
-## Requirements
-
-Supported distributions:
-
-- Debian >= 11
-- Ubuntu >= 20.04 (*Preferred*)
-- AlmaLinux
-- RockyLinux
-- ArchLinux
-- Fedora
-
-Theoretically any OS that supports `nftables` can run this script without too much trouble. It will support more Linux distributions in the future after I test them out one by one.
-
-This script supports both **KVM** and **OpenVZ**, **LXC** machine virtualization types. 
-
-For **OpenVZ**, **LXC** typed machine, [`wireguard-go`](https://github.com/WireGuard/wireguard-go) will be installed instead of the kernel WireGuard implementation.
-
-In this case, you need to enable TUN/TAP driver on your provider's managment panal first.
-
-## Usage
-
-### 1st Step: Upgrade OS
-
-Because WireGuard is a kernel module, you **MUST** upgrade the kernel to latest first and reboot your server once.
-
-```bash
-# If you are using Ubuntu/Debian, etc
-sudo apt update && sudo apt upgrade -y
-
-# If you are using Fedora, AlmaLinux, etc
-sudo dnf update -y
-
-# Arch, etc.
-sudo pacman -Syu
-
-# Reboot once
-sudo reboot
-```
-
-### 2nd Step: Download and run the script.
-
-Download and execute the script. Script user needs to be able to use `sudo` command.
-
-Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
-
-```bash
-git clone https://github.com/xiahualiu/wg_gaming_installer.git
-cd ./wg_gaming_installer
-./install.sh
-```
-
 ## Server Public IP problem
 
-This script needs to run on a server with a public IP address to work.
+This script need to run on a server with a public IP address.
 
-Typically the server public IP should be populated automatically. However for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto-populated public IP address is NOT correct, but instead a subnet IP address (usually starts with `10.*.*.*`).
+At the beginning of the installation, the script will ask for this public IP address.
+
+Normally the server public IP should be populated automatically, however for some cloud providers like Google Cloud Platform and Oracle Cloud, the auto value is NOT the correct public IP address, but a subnet IP address (usually starts with `10.*.*.*`).
 
 In these cases you need to change the value to what your server's acutal public IP is.
 
-## `ip_local_reserved_ports` problem
+## Port Forwarding
 
-You can read [my blog post](https://xiahua.pages.dev/wg-route-nat/#reserve-dnat-ports) to know more about why this script needs to reserve the peer's forward ports on the server.
+The script **Port Forwards** the local port `53`, `88`, `80`, `500`(4 ports for XBOX LIVE) and `1024-65000` to the corresponding ports on the server side. These ports covered most of the ports used by any games. **Please make sure that there is no other application using these ports on the server, otherwise It will deafen any application that listens to these ports.** I highly suggest running this script on an new empty system. 
 
-For most KVM instance with newer kernel, the `net.ipv4.ip_local_reserved_ports` paramemter is available, and the script will automatically reserve the forwarded ports inside the system. However for some old system, such as 'OpenVZ' 'LXC' instances, this paramter may not be available. The installer script will print error information in this case.
+Specifically, if the SSH port is inside the range, the script will automatically move it to port `65432` for not losing access to the server after installation.
 
-If you see such kind of errors, please make sure that the forward ports are NOT in the **Ephemeral Port Range** of your system, ports in this range is used by the system for establishing outgoing connections.
+The script supports both IPv4 and IPv6.
 
-You can check the ephemeral port range by:
+WireGuard does not fit your environment? Check out [openvpn-install](https://github.com/angristan/openvpn-install).
+
+Most part of this script is based on the angristan's [wireguard-install](https://github.com/angristan/wireguard-install/), because I am a new shell programmer so any improvement pull request is welcomed!
+
+## Customize the forwarding ports
+
+The reason why it is full cone is due to the DNAT route rules in the iptables:
+
+After the installation, in `$HOME/.wireguard/rm-fullcone-nat.sh` you can find:
 
 ```bash
-sysctl net.ipv4.ip_local_port_range
+# PostUp sricpt example
+# DNAT 53,80,88,500, 1024 to 65000
+
+### bla bla bla ###
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p udp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination ${CLIENT_WG_IPV4}:53
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination ${CLIENT_WG_IPV4}:80
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination ${CLIENT_WG_IPV4}:88
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p tcp --dport 500 -j DNAT --to-destination ${CLIENT_WG_IPV4}:500
+iptables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination ${CLIENT_WG_IPV4}:1024-65000
+
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p udp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p udp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 53 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:53
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 80 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:80
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 88 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:88
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC}-p tcp --dport 500 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:500
+ip6tables -t nat -A PREROUTING -i ${SERVER_PUB_NIC} -p tcp --dport 1024:65000 -j DNAT --to-destination [${CLIENT_WG_IPV6}]:1024-65000
 ```
 
-## Stop / Restart / Uninstall / List clients / Add/Remove a client 
+If the game needs port that is not covered inside, you can modify the postup and postdown script yourself to add a certain port for it.
+
+* Run the script and **STOP** the wireguard service.
+* Modify `add-fullcone-nat.sh`, `rm-fullcone-nat.sh` according to your need.
+* Run the script and **RESTART** the wireguard service.
+ 
+## Requirements
+
+Main branch supported distributions:
+
+- Debian >= 11
+- Ubuntu >= 20.04 (*Preferred*)
+
+The main branch only works on **KVM** instances. If you are using cloud service from Google, AWS or Oracle, etc. They are based on **KVM** virtualization technology.
+
+Another popular VPS type is **OpenVZ** which usually comes cheaper than **KVM**. If you have this type of machine, unfortunately you cannot run the original WireGuard that requires extra linux kernel module.
+
+However it is still possible to use a userspace WireGuard implementation, for example [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun). Sometimes these userspace implementations are even faster, according to [tests](https://www.reddit.com/r/WireGuard/comments/14r6uf9/i_did_some_benchmarks_of_linux_wireguard/).
+
+### For OpenVZ instances
+
+* Enable TUN/TAP linux driver on your VM management panel, or contact your provider to enable it.
+* Compile either [wireguard-go](https://github.com/WireGuard/wireguard-go) or [BoringTun](https://github.com/cloudflare/boringtun).
+* Move the compiled binary (either `wireguard-go` or `boringrun-cli`) to `/usr/local/bin`.
+* Comment out the installer script line #10-#14, removing the OpenVZ check.
+* Run the installer script now.
+
+## Usage
+
+Download and execute the script. You **DO NOT** need to run the script with `root`, but it requires the user to be in the `sudo` group. Answer the questions asked by the script and it will take care of the rest. For most VPS providers, you can just enter through all the questions.
+
+```bash
+wget https://raw.githubusercontent.com/xiahualiu/wg_gaming_installer/main/wg-gaming-installer.sh 
+bash ./wg-gaming-installer.sh
+```
+
+It will install WireGuard (kernel module and tools) on the server, configure it, create a systemd service and a client configuration file.
+
+## Stop / Restart / Uninstal
 
 Run the script again will give you these options!
